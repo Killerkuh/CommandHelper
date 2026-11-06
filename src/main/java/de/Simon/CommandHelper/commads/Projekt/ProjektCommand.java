@@ -1,6 +1,5 @@
     package de.Simon.CommandHelper.commads.Projekt;
 
-    import de.Simon.CommandHelper.CommandHelper;
     import de.steamwar.command.*;
     import de.steamwar.inventory.*;
     import de.steamwar.linkage.Linked;
@@ -11,11 +10,14 @@
 
     import java.util.ArrayList;
     import java.util.List;
+    import java.util.concurrent.atomic.AtomicReference;
 
     import static de.Simon.CommandHelper.commads.Projekt.ProjektManager.projekts;
 
     @Linked
     public class ProjektCommand extends SWCommand {
+        public static SWItem newProjektItem = new SWItem(Material.GREEN_CONCRETE,"New Projekt");
+        public static SWItem newTaskItem = new SWItem(Material.GREEN_CONCRETE, "New Task");
         public ProjektCommand() {
             super("Todo", "TodoList");
         }
@@ -24,216 +26,224 @@
         public void genericCommand(@Validator Player player) {
             openProjektsViewInv(player);
         }
-        @Register("new")
-        public void newProjekt(@Validator Player player, String name) {
-            if (projekts.stream().anyMatch(projekt -> projekt.name.equalsIgnoreCase(name))) {
-                CommandHelper.message.send("todo.alreadyexits", player, name);
-                return;
-            }
-
-            ProjektManager.createProjekt(name);
-            openProjektsViewInv(player);
-        }
 
 
-        public static SWItem generateProjektItem(Projekt projekt, Player player) {
-            return new SWItem(Material.PAPER, projekt.name).setLore(
-                    CommandHelper.message.parse("todo.projekt.inv.item.lore.1", player),
-                    CommandHelper.message.parse("todo.projekt.inv.item.lore.2", player));
-        }
+
         public static void openProjektsViewInv(Player player) {
-            new SWListInv<>(
-                    player,
-                    CommandHelper.message.parse("todo.projekt.inv.title", player),
-                    projekts.stream()
-                            .map(projekt -> new SWListInv.SWListEntry<>(
-                                    generateProjektItem(projekt, player),
-                                    projekt
-                            ))
-                            .toList(),
-                    (type, projekt) -> {
-                        if (type.isRightClick()) {
-                            openProjektEdit(player, projekt,()->openProjektsViewInv(player));
+            List<SWListInv.SWListEntry<Projekt>> entries = new ArrayList<>(projekts.stream()
+                    .map(p-> new SWListInv.SWListEntry<>(p.getItem(), p)).toList());
+            entries.add(new SWListInv.SWListEntry<>(newProjektItem, null));
 
-                        } else{
-                            openTaskViewInv(player, projekt);
-                        }
+            SWListInv<Projekt> inv = new SWListInv<>(player,
+                    "Projekts",
+                    entries,
+                    (clickType, projekt) -> {
+                        if(projekt == null) openProjektCreateInv(player);
+                        else if(clickType.isRightClick()) openProjektEdit(player, projekt);
+                        else openTaskViewInv(player,projekt);
+                    });
+            inv.open();
+        }
+        private static void openProjektCreateInv(Player player) {
+            AtomicReference<String> description = new AtomicReference<>("Enter A Title");
+            SWInventory inv = new SWInventory(player,9, "Create Projekts");
+            inv.setItem(2,new SWItem(Material.PAPER, description.get()));
+            inv.setCallback(2,clickType -> {
+                SWAnvilInv swAnvilInv  = new SWAnvilInv(player, "Enter A Title", description.get());
+                swAnvilInv.setCallback(s->{
+                    if (!s.isBlank() && projekts.stream().noneMatch(p -> p.name.equalsIgnoreCase(s))) {
+                        description.set(s);
+                        inv.setItem(2,new SWItem(Material.PAPER, description.get()));
                     }
-            ).open();
+                    inv.open();
+                });
+                swAnvilInv.open();
+            });
+            inv.setItem(6, new SWItem(Material.GREEN_STAINED_GLASS_PANE, "§2Create"));
+            inv.setCallback(6,click-> {
+                ProjektManager.createProjekt(description.get());
+                openProjektsViewInv(player);
+            }
+            );
+            inv.open();
         }
 
-        public static SWItem generateTaskItem(Task task, Player player) {
-            return SWItem.getPlayerSkull(task.assigned.getName())
-                    .setEnchanted(task.completed)
-                    .setName(task.priority.getColorCode()+task.description);
-        }
 
         public static void openTaskViewInv(Player player, Projekt projekt) {
-            List<SWListInv.SWListEntry<Task>> entries = new ArrayList<>();
 
-            entries.add(new SWListInv.SWListEntry<>(new SWItem(Material.GREEN_CONCRETE, "Add Task"), null));
-            entries.addAll(projekt.getTasks().stream().map(task ->
-                    new SWListInv.SWListEntry<>(generateTaskItem(task, player), task)
-            ).toList());
-
-            new SWListInv<Task>(player, projekt.name, entries, (clickType, task) -> {
+            List<SWListInv.SWListEntry<Task>> entries = new ArrayList<>(projekt.getTasksByPriority().stream().map(t->
+                    new SWListInv.SWListEntry<>(t.toItem(), t)).toList());
+            entries.add(new SWListInv.SWListEntry<>(newTaskItem, null));
+            SWListInv<Task> inv = new SWListInv<>(player, "Tasks: " + projekt.name, entries, (clickType, task) -> {
                 if (task == null) {
                     openTaskCreateInv(player, projekt);
-                    return;
-                }
-
-                if (clickType.isRightClick()) {
-                    task.completed = !task.completed;
+                } else if(clickType.isRightClick()) {
+                    task.toogle();
                     openTaskViewInv(player, projekt);
                 } else {
-                    openTaskEditInv(player, task, () -> openTaskViewInv(player, projekt));
+                    openTaskEditInv(player, task, projekt);
                 }
-            }).open();
+            });
+            inv.open();
         }
 
         public static void openTaskCreateInv(Player player, Projekt projekt) {
-            Task task = new Task(player, "", Priority.NORMAL);
-            SWInventory inv = new SWInventory(player, 9, "Create Task");
+            AtomicReference<String> title = new AtomicReference<>("title");
+            AtomicReference<String> description = new AtomicReference<>("Click to Edit Description");
+            AtomicReference<Priority> priority = new AtomicReference<>(Priority.LOW);
+            AtomicReference<OfflinePlayer> OffPlayer = new AtomicReference<>(player);
 
-            inv.setItem(2, new SWItem(Material.PAPER, "Description", type -> {
-                SWAnvilInv anvilInv = new SWAnvilInv(player, "Enter Description");
-                anvilInv.setCallback(s -> {
+            SWInventory inv = new SWInventory(player, 9,"Create Task");
+
+            inv.setItem(0, new SWItem(Material.PAPER, title.get()));
+            inv.setCallback(0, clickType ->{
+                SWAnvilInv swAnvilInv = new SWAnvilInv(player,"Set Title", title.get());
+                swAnvilInv.setCallback(s->{
+                    if(!s.isBlank() && projekt.getTasks().stream().noneMatch(t-> t.title.equalsIgnoreCase(s.trim()))) {
+                        title.set(s);
+                        inv.setItem(0, new SWItem(Material.PAPER, title.get()));
+                    }
+                    inv.open();
+                });
+                swAnvilInv.open();
+            });
+
+            inv.setItem(2, new SWItem(Material.PAPER, description.get()));
+            inv.setCallback(2, clickType ->{
+                SWAnvilInv swAnvilInv = new SWAnvilInv(player,"Set Description", description.get());
+                swAnvilInv.setCallback(s->{
+                    if(!s.isBlank()) {
+                        description.set(s);
+                        inv.setItem(2, new SWItem(Material.PAPER, description.get()));
+                    }
+
+                    inv.open();
+                });
+                swAnvilInv.open();
+            });
+            inv.setItem(4, new SWItem(priority.get().getBanner(),  priority.get().getName()));
+            inv.setCallback(4,clickType -> {
+                priority.set(priority.get().next());
+                inv.setItem(4,new SWItem(priority.get().getBanner(),  priority.get().getName()));
+            });
+            inv.setItem(6, SWItem.getPlayerSkull(player).setName(player.getName()));
+            inv.setCallback(6,click->{
+                SWAnvilInv swAnvilInv = new SWAnvilInv(player,"Set Player", OffPlayer.get().getName());
+                swAnvilInv.setCallback(s->{
+                    OfflinePlayer newOffPlayer = Bukkit.getOfflinePlayer(s);
+                    if(!s.isBlank() && newOffPlayer.hasPlayedBefore() ) {
+                        OffPlayer.set(newOffPlayer);
+                        inv.setItem(6, SWItem.getPlayerSkull(OffPlayer.get()).setName(OffPlayer.get().getName()));
+                    }
+                    inv.open();
+                });
+                swAnvilInv.open();
+            });
+            inv.setItem(8, new SWItem(Material.GREEN_CONCRETE, "Create Task"));
+            inv.setCallback(8, click->{
+                projekt.addTask(new Task(title.get(), description.get(), OffPlayer.get(), priority.get()));
+                openTaskViewInv(player, projekt);
+            });
+
+            inv.open();
+        }
+
+        public static void openTaskEditInv(Player player, Task task, Projekt projekt) {
+            SWInventory inv = new SWInventory(player, 9, "Edit Task");
+
+            inv.setItem(0, new SWItem(Material.PAPER, task.title));
+            inv.setCallback(0, click -> {
+                SWAnvilInv anvil = new SWAnvilInv(player, "Set Title", task.title);
+                anvil.setCallback(s -> {
+                    if (!s.isBlank() && projekt.getTasks().stream().noneMatch(t -> t != task && t.title.equals(s))) {
+                        task.title = s;
+                        inv.setItem(0, new SWItem(Material.PAPER, task.title));
+                    }
+                    inv.open();
+                });
+                anvil.open();
+            });
+
+            inv.setItem(2, new SWItem(Material.PAPER, task.description));
+            inv.setCallback(2, click -> {
+                SWAnvilInv anvil = new SWAnvilInv(player, "Set Description", task.description);
+                anvil.setCallback(s -> {
                     if (!s.isBlank()) {
                         task.description = s;
+                        inv.setItem(2, new SWItem(Material.PAPER, task.description));
                     }
-                    openTaskCreateInv(player, projekt);
-                });
-                anvilInv.open();
-            }));
-
-            inv.setItem(4, new SWItem(
-                    task.getPriority().getBanner(),
-                    task.getPriority().getColorCode() + task.getPriority().name(),
-                    clickType -> {
-                        task.priority = task.priority.next();
-                        openTaskCreateInv(player, projekt);
-                    }));
-
-            inv.setItem(6, SWItem.getPlayerSkull(task.assigned)
-                    .setName(task.assigned.getName())
-                    .setCallback(clickType -> {
-                        SWAnvilInv anvilInv = new SWAnvilInv(player, "Enter Playername");
-                        anvilInv.setCallback(s -> {
-                            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(s);
-                            if (offlinePlayer.hasPlayedBefore()) {
-                                task.assigned = offlinePlayer;
-                            }
-                            openTaskCreateInv(player, projekt);
-                        });
-                        anvilInv.open();
-                    }));
-
-            inv.setItem(8, new SWItem(Material.GREEN_CONCRETE, "Create Task").setCallback(clickType -> {
-                if (task.description.isBlank()) {
-                    return;
-                }
-
-                projekt.getTasks().add(task);
-                openTaskViewInv(player, projekt);
-            }));
-
-            inv.open();
-        }
-
-        public static void openTaskEditInv (Player player, Task task, Runnable onClose) {
-
-            SWInventory inv = new SWInventory(player, 9, CommandHelper.message.parse("todo.task.inv.edit.title", player));
-            setDescriptionEditorItem(inv, player, task);
-            setPriorityEditorItem(inv, player, task);
-            setAssingnedEditorItem(inv, player,task);
-            setDeleteTaskItem(inv, player, task, onClose );
-            inv.addCloseRunnable(onClose);
-            inv.open();
-
-        }
-        private static void setDescriptionEditorItem(SWInventory inv, Player player, Task task) {
-            inv.setItem(2, new SWItem(Material.PAPER, "Description", type -> {
-                SWAnvilInv AInv = new SWAnvilInv(player,"Enter New Description", task.description);
-                AInv.setCallback(s-> {
-                    task.description = s;
-                    setDescriptionEditorItem(inv, player, task);
                     inv.open();
                 });
-                AInv.open();
+                anvil.open();
+            });
 
-            }));
-        }
-        private static void setPriorityEditorItem(SWInventory inv, Player player, Task task) {
-            inv.setItem(4,new SWItem(task.getPriority().getBanner(), task.getPriority().getColorCode()+task.getPriority().name(), clickType -> {
+            inv.setItem(4, new SWItem(task.priority.getBanner(), task.priority.getName()));
+            inv.setCallback(4, click -> {
                 task.priority = task.priority.next();
-                setPriorityEditorItem(inv, player, task);
-            }));
-        }
-        private static void setAssingnedEditorItem(SWInventory inv, Player player, Task task) {
-            SWItem head = SWItem.getPlayerSkull(task.assigned)
-                    .setName(task.assigned.getName())
-                    .setCallback(clickType->{
-                        SWAnvilInv AInv = new SWAnvilInv(player,"Enter Playername");
-                        AInv.setCallback(s -> {
-                            OfflinePlayer OPlayer = Bukkit.getOfflinePlayer(s);
-                            if(OPlayer.hasPlayedBefore()) {
-                                task.assigned = OPlayer;
-                                setAssingnedEditorItem(inv, player, task);
-                            }
-                            inv.open();
-                        });
-                        AInv.open();
-                    });
+                inv.setItem(4, new SWItem(task.priority.getBanner(), task.priority.getName()));
+            });
 
-            inv.setItem(6,head);
-        }
-        private static void setDeleteTaskItem(SWInventory inv, Player player, Task task, Runnable onclose) {
-            inv.setItem(8, new SWItem(Material.RED_CONCRETE,"Delete Task").setCallback(clickType -> {
-                SWAnvilInv AInv = new SWAnvilInv(player, "Type: \"Confirm\" to Delete this task");
-                AInv.setCallback(s->{
-                    if(s.equalsIgnoreCase("confirm")) {
-                        ProjektManager.deleteTask(task);
-                        onclose.run();
+            inv.setItem(6, SWItem.getPlayerSkull(task.assigned).setName(task.assigned.getName()));
+            inv.setCallback(6, click -> {
+                SWAnvilInv anvil = new SWAnvilInv(player, "Set Player", task.assigned.getName());
+                anvil.setCallback(s -> {
+                    OfflinePlayer newPlayer = Bukkit.getOfflinePlayer(s);
+                    if (!s.isBlank() && newPlayer.hasPlayedBefore()) {
+                        task.assigned = newPlayer;
+                        inv.setItem(6, SWItem.getPlayerSkull(newPlayer).setName(newPlayer.getName()));
                     }
-                });
-                AInv.open();
-            }));
-        }
-
-        private static void openProjektEdit(Player player, Projekt projekt, Runnable onCLose) {
-            SWInventory inv = new SWInventory(player, 9, "Edit Projects");
-            inv.addCloseRunnable(onCLose);
-            //AIR AIR PAper->Name AIR AIR AIR RED_GLASS-> DELTE AIR AIR
-            setProjektNameEditorItem(inv,player,projekt);
-            setProjektDeleteEditorItem(inv,player,projekt);
-            inv.open();
-
-        }
-        private static void setProjektNameEditorItem(SWInventory inv, Player player, Projekt projekt) {
-            inv.setItem(3,new SWItem(Material.PAPER, "Change Name").setCallback(type->{
-                SWAnvilInv Anvilinv = new SWAnvilInv(player, "Change Name");
-                Anvilinv.setCallback(s -> {
-                    projekt.name = s;
-                    setProjektNameEditorItem(inv, player, projekt);
                     inv.open();
                 });
-                Anvilinv.open();
-            }));
-        }
-        private static void setProjektDeleteEditorItem(SWInventory inv, Player player, Projekt projekt){
-            inv.setItem(7, new SWItem(Material.RED_CONCRETE, "Delete Projekt").setCallback(clickType -> {
-                SWAnvilInv AInv = new SWAnvilInv(player, "Type: "+projekt.name+" to Delete Projekt");
-                AInv.setCallback(s -> {
-                    if (s.equalsIgnoreCase(projekt.name)) {
-                        ProjektManager.deleteProjekt(projekt);
-                        openProjektsViewInv(player);
+                anvil.open();
+            });
+
+            inv.setItem(8, new SWItem(Material.RED_CONCRETE, "Delete Task"));
+            inv.setCallback(8, click -> {
+                SWAnvilInv anvil = new SWAnvilInv(player, "Type: " + task.title + " to confirm");
+                anvil.setCallback(s -> {
+                    if (s.equalsIgnoreCase(task.title)) {
+                        ProjektManager.deleteTask(task);
+                        openTaskViewInv(player, projekt);
                     } else {
                         inv.open();
                     }
                 });
-                AInv.open();
-            }));
+                anvil.open();
+            });
 
+            inv.open();
+        }
+
+
+        private static void openProjektEdit(Player player, Projekt projekt) {
+            SWInventory inv = new SWInventory(player, 9,"Edit Projekt");
+            inv.setItem(2, new SWItem(Material.PAPER, projekt.name));
+            inv.setCallback(2,click->{
+                SWAnvilInv swAnvilInv = new SWAnvilInv(player, "Enter Description", projekt.name);
+                swAnvilInv.setCallback(s -> {
+                    if(!s.isBlank() && projekts.stream().noneMatch(p->s.equals(p.name))) {
+                        projekt.name = s;
+                        inv.setItem(2, new SWItem(Material.PAPER, projekt.name));
+                    }
+                    inv.open();
+                });
+                swAnvilInv.open();
+            });
+            inv.setItem(6, new SWItem(Material.RED_CONCRETE, "Delete Projekt"));
+            inv.setCallback(6, click->{
+                SWAnvilInv swAnvilInv = new SWAnvilInv(player, "Type: "+ projekt.name.toLowerCase()+" to confirm");
+                swAnvilInv.setCallback(s->{
+                    if(s.equalsIgnoreCase(projekt.name)) {
+                        ProjektManager.deleteProjekt(projekt);
+                        openProjektsViewInv(player);
+                    }
+                    else {
+                        inv.open();
+                    }
+                });
+                swAnvilInv.open();
+            });
+            inv.open();
         }
 
     }

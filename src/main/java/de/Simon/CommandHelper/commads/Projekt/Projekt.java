@@ -1,6 +1,10 @@
 
 package de.Simon.CommandHelper.commads.Projekt;
 
+import de.steamwar.inventory.SWItem;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -8,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Projekt implements BinarySerializable  {
-    ;
+
 
     public String name;
     private final List<Task> tasks = new ArrayList<>();
@@ -34,16 +38,6 @@ public class Projekt implements BinarySerializable  {
 
     public void addTask(Task task) {
         tasks.add(task);
-    }
-
-    public void removeTask(Task task) {
-        tasks.remove(task);
-    }
-
-    public void completeTask(Task task) {
-        if (tasks.contains(task)) {
-            task.complete();
-        }
     }
 
     public List<Task> getTasks() {
@@ -82,13 +76,22 @@ public class Projekt implements BinarySerializable  {
     @Override
     public void read(DataInputStream in) throws IOException {
         name = in.readUTF();
-
         int taskCount = in.readInt();
-
         for (int i = 0; i < taskCount; i++) {
             Task task = new Task();
             task.read(in);
             tasks.add(task);
         }
+    }
+
+    public SWItem getItem() {
+        SWItem item = new SWItem();
+        item.setItemStack(new ItemStack(Material.PAPER));
+        item.setName(name+ ": "+getProgress()*100+"%");
+        item.setEnchanted(isCompleted());
+        item.setLore(
+                "Right Click to Edit Projekt" ,
+                "Left click to see task");
+        return item;
     }
 }

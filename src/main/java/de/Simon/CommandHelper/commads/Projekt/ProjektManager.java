@@ -1,24 +1,23 @@
 package de.Simon.CommandHelper.commads.Projekt;
 
+import de.steamwar.linkage.Linked;
 import de.steamwar.linkage.api.Disable;
 import de.steamwar.linkage.api.Enable;
 import org.bukkit.Bukkit;
 
 import java.io.*;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
-
+@Linked
 public class ProjektManager implements Enable, Disable {
     public static final List<Projekt> projekts = new ArrayList<>();
     public static File saveFile = new File(
             Bukkit.getWorlds().getFirst().getWorldFolder(),
             "projekt.save"
     );
-    public static Projekt createProjekt(String name) {
+    public static void createProjekt(String name) {
         Projekt projekt = new Projekt(name);
         projekts.add(projekt);
-        return projekt;
     }
     public static void deleteTask(Task task) {
         projekts.forEach(projekt -> projekt.getTasks().remove(task));
