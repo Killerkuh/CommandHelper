@@ -11,7 +11,7 @@ import java.util.List;
 @Linked
 public class ProjektManager implements Enable, Disable {
     public static final List<Projekt> projekts = new ArrayList<>();
-    public static File saveFile = new File(
+    public static final File SAVE_FILE = new File(
             Bukkit.getWorlds().getFirst().getWorldFolder(),
             "projekt.save"
     );
@@ -28,9 +28,9 @@ public class ProjektManager implements Enable, Disable {
     @Override
     public void enable() {
         try {
-            if (!saveFile.exists() || saveFile.length() == 0) return;
+            if (!SAVE_FILE.exists() || SAVE_FILE.length() == 0) return;
 
-            try (DataInputStream in = new DataInputStream(new FileInputStream(saveFile))) {
+            try (DataInputStream in = new DataInputStream(new FileInputStream(SAVE_FILE))) {
 
                 int count = in.readInt();
 
@@ -48,7 +48,7 @@ public class ProjektManager implements Enable, Disable {
 
     public void disable() {
         try (DataOutputStream out = new DataOutputStream(
-                new FileOutputStream(saveFile))) {
+                new FileOutputStream(SAVE_FILE))) {
 
             out.writeInt(projekts.size());
 
