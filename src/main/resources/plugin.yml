@@ -1,0 +1,8 @@
+name: CommandHelper
+description: $description
+prefix: CfSB
+version: '0.1'
+main: de.Simon.CommandHelper.CommandHelper
+api-version: '1.21.6'
+load: POSTWORLD
+authors: [ Simon ]
