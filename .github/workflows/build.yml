@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Setup Repo
+      - name: Checkout Repository
         uses: actions/checkout@v7
 
       - name: Setup Java 21
@@ -23,16 +23,19 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Install Gradle 9.4.0
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-9.4.0-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-9.4.0/bin" >> "$GITHUB_PATH"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Make Gradle Wrapper Executable
-        run: chmod +x ./gradlew
-
       - name: Build with Gradle
-        run: ./gradlew build --no-daemon
+        run: gradle build --no-daemon
 
-      - name: Copy to Output
+      - name: Copy JAR to Output
         run: |
           mkdir -p output
           cp build/libs/CommandHelper-1.0-SNAPSHOT-all.jar output/CommandHelper.jar
@@ -41,6 +44,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: CommandHelper
-          path: output/*
+          path: output/CommandHelper.jar
           if-no-files-found: error
           retention-days: 14
