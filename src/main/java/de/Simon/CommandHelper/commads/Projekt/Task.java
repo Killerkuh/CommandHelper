@@ -47,7 +47,7 @@ public class Task implements BinarySerializable {
         return completed;
     }
 
-    public void toogle() {
+    public void toggle() {
         this.completed = !completed;
     }
 
@@ -77,7 +77,7 @@ public class Task implements BinarySerializable {
         priority = Priority.fromValue(in.readUnsignedByte());
 
             if (in.readBoolean()) {
-                assigned = Bukkit.getPlayer(new UUID(in.readLong(), in.readLong()));
+                assigned = Bukkit.getOfflinePlayer(new UUID(in.readLong(), in.readLong()));
             }
 
         completed = in.readBoolean();

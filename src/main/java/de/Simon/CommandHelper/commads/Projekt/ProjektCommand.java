@@ -78,7 +78,7 @@
                 if (task == null) {
                     openTaskCreateInv(player, projekt);
                 } else if(clickType.isRightClick()) {
-                    task.toogle();
+                    task.toggle();
                     openTaskViewInv(player, projekt);
                 } else {
                     openTaskEditInv(player, task, projekt);

@@ -42,7 +42,7 @@ public class ProjektManager implements Enable, Disable {
             }
 
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new SecurityException("Could not Load Projekts: ", e.getCause());
         }
     }
 
@@ -57,7 +57,7 @@ public class ProjektManager implements Enable, Disable {
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new SecurityException("Could not Save Projekts to "+SAVE_FILE+" because:", e.getCause());
         }
     }
 
